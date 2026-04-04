@@ -1,22 +1,27 @@
 ---
 title: "01_Data processing"
-arthor: 豆豆和豆豆的朋友们
+authors: "Trudy, Jenny, Janice, ZZ"
 output: html_document
 date: "2026-04-04"
 ---
 
 ```{r setup}
-#doudouf
+
 library(tidyverse)
 library(rvest)
 library(here)
+library(lubridate)
+library(trend)
+library(cowplot)
 
 ```
 
 
 ## Data Input
-```{r cars}
-oil
+```{r}
+price <- read_excel("Data/Cushing, OK WTI Spot Price FOB (Dollars per Barrel).xls")
+stock <- read_excel("Data/U.S. Ending Stocks of Crude Oil (Thousand Barrels).xls")
+production <- read_excel("Data/U.S. Field Production of Crude Oil (Thousand Barrels per Day).xls")
 ```
 
 ## Including Plots

@@ -75,8 +75,12 @@ stock_ts <- ts(stock_df[,2], start = c(2005, 1), frequency = 12)
 
 # Subset to same training period (2000–2025)
 prod_sub  <- window(prod_ts,  start = c(2005,1), end = c(2025,12))
-stock_sub <- window(stock_ts, start = c(2005,1), end = c(2025,12))
+plot(prod_sub, main = "U.S Domestic Oil Production (2000-2025)", ylab = "Thousands Barrels per Day", xlab = "Time")
 
+stock_sub <- window(stock_ts, start = c(2005,1), end = c(2025,12))
+plot(stock_sub, main = "U.S Oil Stock (2000-2025)", ylab = "Thousands Barrels", xlab = "Time")
+
+# arimax testing
 time_index <- time(wti_sub)
 
 war_dummy <- ifelse(
@@ -234,7 +238,7 @@ plot(
   main = "WTI Price (2021–2026) with Forecast"
 )
 
-  abline(v = 2026 + 3/12, col = "blue", lty = 3, lwd = 2)+
+  abline(v = 2026 + 3/12, col = "blue", lty = 3, lwd = 2) +
   lines(
   wti_forecast_ts,
   col = "red",

@@ -54,6 +54,7 @@ fit_arima
 
 ```
 
+# Involve fundamentals (production and inventores) and shock (war dummy)
 ```{r}
 stock_df <- data.frame(
   Date  = as.Date(stock_raw[[1]], format = "%Y/%m/%d"),

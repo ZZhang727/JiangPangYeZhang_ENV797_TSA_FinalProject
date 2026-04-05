@@ -232,7 +232,8 @@ plot(
   ylab = "WTI Price",
   xlab = "Time",
   main = "WTI Price (2021–2026) with Forecast"
-)+
+)
+
   abline(v = 2026 + 3/12, col = "blue", lty = 3, lwd = 2)+
   lines(
   wti_forecast_ts,
@@ -241,7 +242,7 @@ plot(
   lty = 2 
 )
 
-legend(
+  legend(
   "topleft",
   legend = c("Actual WTI", "Forecast (ARIMA + War Shock)", "Forecast Start"),
   col = c("black", "red", "blue"),

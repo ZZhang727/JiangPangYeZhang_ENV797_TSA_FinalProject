@@ -33,7 +33,7 @@ We are looking at a 10-year range because this would be long enough to observe h
 
 ```{r}
 wti_df <- data.frame(
-  Date  = as.Date(wti_raw[[1]]),
+  Date  = as.Date(wti_raw[[1]], format = "%Y/%m/%d"),
   Price = as.numeric(wti_raw[[2]])
 ) %>%
   na.omit() %>%
@@ -41,7 +41,7 @@ wti_df <- data.frame(
 
 wti_ts <- ts(wti_df[,2], start = c(1986,1), frequency = 12)
 
-wti_sub <- window(wti_ts, start = c(2000, 1), end = c(2025, 12))
+wti_sub <- window(wti_ts, start = c(2005, 1), end = c(2025, 12))
 
 # Plot WTI training series
 plot(wti_sub, main = "WTI Price (2000-2025)", ylab = "Price", xlab = "Time")
@@ -56,36 +56,37 @@ fit_arima
 
 ```{r}
 stock_df <- data.frame(
-  Date  = as.Date(stock_raw[[1]]),
+  Date  = as.Date(stock_raw[[1]], format = "%Y/%m/%d"),
   Price = as.numeric(stock_raw[[2]])
 ) %>%
   na.omit() %>%
   arrange(Date)
 
 prod_df <- data.frame(
-  Date  = as.Date(prod_raw[[1]]),
+  Date  = as.Date(prod_raw[[1]], format = "%Y/%m/%d"),
   Price = as.numeric(prod_raw[[2]])
 ) %>%
   na.omit() %>%
   arrange(Date)
 
-prod_ts  <- ts(prod_df,  start = c(1920, 1), frequency = 12)
-stock_ts <- ts(stock_df, start = c(2005, 1), frequency = 12)
+prod_ts  <- ts(prod_df[,2],  start = c(1920, 1), frequency = 12)
+stock_ts <- ts(stock_df[,2], start = c(2005, 1), frequency = 12)
 
 # Subset to same training period (2000–2025)
-prod_sub  <- window(prod_ts,  start = c(2000,1), end = c(2025,12))
-stock_sub <- window(stock_ts, start = c(2000,1), end = c(2025,12))
+prod_sub  <- window(prod_ts,  start = c(2005,1), end = c(2025,12))
+stock_sub <- window(stock_ts, start = c(2005,1), end = c(2025,12))
 
 time_index <- time(wti_sub)
 
 war_dummy <- ifelse(
-  time_index >= 2022.1 & time_index <= 2022.3,
+  time_index >= 2022.1 & time_index < 2022.4,
   1, 0
 )
 
 xreg_all <- cbind(prod_sub, stock_sub, war_dummy)
 
 fit_arimax <- auto.arima(wti_sub, xreg = xreg_all)
+fit_arimax
 ```
 
 

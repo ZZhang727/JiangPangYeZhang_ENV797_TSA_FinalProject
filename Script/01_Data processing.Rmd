@@ -7,29 +7,101 @@ date: "2026-04-04"
 
 ```{r setup}
 
-library(tidyverse)
-library(rvest)
-library(here)
+library(readxl)
+library(dplyr)
 library(lubridate)
-library(trend)
-library(cowplot)
+library(tidyr)
+library(forecast)
+library(tseries)
+library(ggplot2)
 
 ```
 
+We use three raw data series: oil price, U.S. oil stock, and U.S. domestic oil production. Oil price is the dependent variable of interest. U.S. oil stock and U.S. domestic oil production are included to account for supply-side conditions that may influence oil prices. We hypothesize that geopolitical events affect oil prices indirectly by changing U.S. oil inventories and, in turn, domestic oil production. These changes may then contribute to movements in oil prices.
 
 ## Data Input
+
 ```{r}
-price <- read_excel("Data/Cushing, OK WTI Spot Price FOB (Dollars per Barrel).xls")
-stock <- read_excel("Data/U.S. Ending Stocks of Crude Oil (Thousand Barrels).xls")
-production <- read_excel("Data/U.S. Field Production of Crude Oil (Thousand Barrels per Day).xls")
+wti_raw <- read_excel("Data/Cushing, OK WTI Spot Price FOB (Dollars per Barrel).xls")
+stock_raw <- read_excel("Data/U.S. Ending Stocks of Crude Oil (Thousand Barrels).xls")
+prod_raw <- read_excel("Data/U.S. Field Production of Crude Oil (Thousand Barrels per Day).xls")
 ```
 
-## Including Plots
+We are looking at a 10-year range because this would be long enough to observe how geopolitical events influenced oil price in the previous years. With that said, we will only select data
 
-You can also embed plots, for example:
+## Data Wrangling
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+wti_df <- data.frame(
+  Date  = as.Date(wti_raw[[1]]),
+  Price = as.numeric(wti_raw[[2]])
+) %>%
+  na.omit() %>%
+  arrange(Date)
+
+wti_ts <- ts(wti_df[,2], start = c(1986,1), frequency = 12)
+
+wti_sub <- window(wti_ts, start = c(2000, 1), end = c(2025, 12))
+
+# Plot WTI training series
+plot(wti_sub, main = "WTI Price (2000-2025)", ylab = "Price", xlab = "Time")
+
+# Stationarity check
+adf.test(wti_sub)
+
+fit_arima <- auto.arima(wti_sub)
+fit_arima
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+stock_df <- data.frame(
+  Date  = as.Date(stock_raw[[1]]),
+  Price = as.numeric(stock_raw[[2]])
+) %>%
+  na.omit() %>%
+  arrange(Date)
+
+prod_df <- data.frame(
+  Date  = as.Date(prod_raw[[1]]),
+  Price = as.numeric(prod_raw[[2]])
+) %>%
+  na.omit() %>%
+  arrange(Date)
+
+prod_ts  <- ts(prod_df,  start = c(1920, 1), frequency = 12)
+stock_ts <- ts(stock_df, start = c(2005, 1), frequency = 12)
+
+# Subset to same training period (2000–2025)
+prod_sub  <- window(prod_ts,  start = c(2000,1), end = c(2025,12))
+stock_sub <- window(stock_ts, start = c(2000,1), end = c(2025,12))
+
+time_index <- time(wti_sub)
+
+war_dummy <- ifelse(
+  time_index >= 2022.1 & time_index <= 2022.3,
+  1, 0
+)
+
+xreg_all <- cbind(prod_sub, stock_sub, war_dummy)
+
+fit_arimax <- auto.arima(wti_sub, xreg = xreg_all)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

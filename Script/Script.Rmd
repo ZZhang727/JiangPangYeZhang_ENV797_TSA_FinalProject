@@ -84,9 +84,9 @@ plot(stock_sub, main = "U.S Oil Stock (2000-2025)", ylab = "Thousands Barrels", 
 time_index <- time(wti_sub)
 
 war_dummy <- ifelse(
-  time_index >= 2022.1 & time_index < 2022.4,
-  1, 0
-)
+ time_index >= 2022 + 2/12 &
+ time_index < 2022 + 6/12,
+1,0)
 
 xreg_all <- cbind(prod_sub, stock_sub, war_dummy)
 
@@ -317,16 +317,11 @@ plot(
   main = "WTI Price (2021–2026) with Forecast"
 )
 
-<<<<<<< HEAD:Script/01_Data processing.Rmd
-  abline(v = 2026 + 3/12, col = "blue", lty = 3, lwd = 2) +
-  lines(
-=======
 # Add forecast start line
 abline(v = 2026 + 3/12, col = "blue", lty = 3, lwd = 2)
 
 # Add forecast line
 lines(
->>>>>>> 46d73d6 (Add ARIMA + Fourier model and update 2026 forecast):Script/Script.Rmd
   wti_forecast_ts,
   col = "red",
   lwd = 2,
@@ -343,7 +338,6 @@ legend(
   cex = 0.8
 )
 ```
-
 
 
 

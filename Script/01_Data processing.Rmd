@@ -1,0 +1,370 @@
+---
+title: "01_Data processing"
+authors: "Trudy, Jenny, Janice, ZZ"
+output: html_document
+date: "2026-04-04"
+---
+
+```{r setup}
+
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(tidyr)
+library(forecast)
+library(tseries)
+library(ggplot2)
+
+```
+
+We use three raw data series: oil price, U.S. oil stock, and U.S. domestic oil production. Oil price is the dependent variable of interest. U.S. oil stock and U.S. domestic oil production are included to account for supply-side conditions that may influence oil prices. We hypothesize that geopolitical events affect oil prices indirectly by changing U.S. oil inventories and, in turn, domestic oil production. These changes may then contribute to movements in oil prices.
+
+## Data Input
+
+```{r}
+wti_raw <- read_excel("Data/Cushing, OK WTI Spot Price FOB (Dollars per Barrel).xls")
+stock_raw <- read_excel("Data/U.S. Ending Stocks of Crude Oil (Thousand Barrels).xls")
+prod_raw <- read_excel("Data/U.S. Field Production of Crude Oil (Thousand Barrels per Day).xls")
+```
+
+We are looking at a 10-year range because this would be long enough to observe how geopolitical events influenced oil price in the previous years. With that said, we will only select data
+
+## Data Wrangling
+
+```{r}
+wti_df <- data.frame(
+  Date  = as.Date(wti_raw[[1]], format = "%Y/%m/%d"),
+  Price = as.numeric(wti_raw[[2]])
+) %>%
+  na.omit() %>%
+  arrange(Date)
+
+wti_ts <- ts(wti_df[,2], start = c(1986,1), frequency = 12)
+ 
+wti_sub <- window(wti_ts, start = c(2005, 1), end = c(2025, 12))
+
+# Plot WTI training series
+plot(wti_sub, main = "WTI Price (2000-2025)", ylab = "Price", xlab = "Time")
+
+# Stationarity check
+adf.test(wti_sub)
+
+fit_arima <- auto.arima(wti_sub)
+fit_arima
+
+```
+
+# knitting table
+```{r include = FALSE}
+analysis_df <- wti_df %>%
+  rename(WTI_Price = Price) %>%
+  filter(Date >= as.Date("2005-01-01"),
+         Date <= as.Date("2025-12-31")) %>%
+  left_join(
+    stock_df %>%
+      rename(Oil_Stocks = Price),
+    by = "Date"
+  ) %>%
+  left_join(
+    prod_df %>%
+      rename(Field_Production = Price),
+    by = "Date"
+  ) %>%
+  mutate(
+    War_Dummy = ifelse(Date >= as.Date("2022-02-01") &
+                         Date <= as.Date("2022-07-31"), 1, 0)
+  ) %>%
+  drop_na()
+
+data_structure_tbl <- tibble::tibble(
+  Variable = c("Date", "WTI_Price", "Oil_Stocks", "Field_Production", "War_Dummy"),
+  Description = c(
+    "Monthly observation date",
+    "Cushing, OK WTI spot price FOB",
+    "U.S. ending stocks of crude oil",
+    "U.S. field production of crude oil",
+    "Indicator for Russia–Ukraine war period"
+  ),
+  Unit = c(
+    "Date",
+    "USD/barrel",
+    "Thousand barrels",
+    "Thousand barrels/day",
+    "0/1"
+  ),
+  Start = c(
+    format(min(analysis_df$Date), "%Y-%m"),
+    format(min(analysis_df$Date), "%Y-%m"),
+    format(min(analysis_df$Date), "%Y-%m"),
+    format(min(analysis_df$Date), "%Y-%m"),
+    format(min(analysis_df$Date), "%Y-%m")
+  ),
+  End = c(
+    format(max(analysis_df$Date), "%Y-%m"),
+    format(max(analysis_df$Date), "%Y-%m"),
+    format(max(analysis_df$Date), "%Y-%m"),
+    format(max(analysis_df$Date), "%Y-%m"),
+    format(max(analysis_df$Date), "%Y-%m")
+  ),
+  Mean = c(
+    NA,
+    round(mean(analysis_df$WTI_Price, na.rm = TRUE), 2),
+    round(mean(analysis_df$Oil_Stocks, na.rm = TRUE), 2),
+    round(mean(analysis_df$Field_Production, na.rm = TRUE), 2),
+    round(mean(analysis_df$War_Dummy, na.rm = TRUE), 2)
+  ),
+  Min = c(
+    NA,
+    round(min(analysis_df$WTI_Price, na.rm = TRUE), 2),
+    round(min(analysis_df$Oil_Stocks, na.rm = TRUE), 2),
+    round(min(analysis_df$Field_Production, na.rm = TRUE), 2),
+    min(analysis_df$War_Dummy, na.rm = TRUE)
+  ),
+  Max = c(
+    NA,
+    round(max(analysis_df$WTI_Price, na.rm = TRUE), 2),
+    round(max(analysis_df$Oil_Stocks, na.rm = TRUE), 2),
+    round(max(analysis_df$Field_Production, na.rm = TRUE), 2),
+    max(analysis_df$War_Dummy, na.rm = TRUE)
+  ),
+  Source = c(
+    "Constructed from merged monthly datasets",
+    "Cushing, OK WTI Spot Price FOB (Dollars per Barrel).xls",
+    "U.S. Ending Stocks of Crude Oil (Thousand Barrels).xls",
+    "U.S. Field Production of Crude Oil (Thousand Barrels per Day).xls",
+    "Constructed from study period definition"
+  )
+)
+```
+
+```{r echo=FALSE}
+knitr::kable(
+  data_structure_tbl,
+  caption = "Summary of Variables Used in the Analysis"
+)
+
+knitr::kable(
+  head(analysis_df, 10),
+  caption = "First 10 Rows of the Final Analysis Dataset"
+)
+```
+
+
+# Involve fundamentals (production and inventores) and shock (war dummy)
+```{r}
+stock_df <- data.frame(
+  Date  = as.Date(stock_raw[[1]], format = "%Y/%m/%d"),
+  Price = as.numeric(stock_raw[[2]])
+) %>%
+  na.omit() %>%
+  arrange(Date)
+
+prod_df <- data.frame(
+  Date  = as.Date(prod_raw[[1]], format = "%Y/%m/%d"),
+  Price = as.numeric(prod_raw[[2]])
+) %>%
+  na.omit() %>%
+  arrange(Date)
+
+prod_ts  <- ts(prod_df[,2],  start = c(1920, 1), frequency = 12)
+stock_ts <- ts(stock_df[,2], start = c(2005, 1), frequency = 12)
+
+# Subset to same training period (2000–2025)
+prod_sub  <- window(prod_ts,  start = c(2005,1), end = c(2025,12))
+plot(prod_sub, main = "U.S Domestic Oil Production (2000-2025)", ylab = "Thousands Barrels per Day", xlab = "Time")
+
+stock_sub <- window(stock_ts, start = c(2005,1), end = c(2025,12))
+plot(stock_sub, main = "U.S Oil Stock (2000-2025)", ylab = "Thousands Barrels", xlab = "Time")
+
+# arimax testing
+time_index <- time(wti_sub)
+
+war_dummy <- ifelse(
+  time_index >= 2022.1 & time_index < 2022.4,
+  1, 0
+)
+
+xreg_all <- cbind(prod_sub, stock_sub, war_dummy)
+
+fit_arimax <- auto.arima(wti_sub, xreg = xreg_all)
+fit_arimax
+```
+
+# Use Gulf War to train and test for Ukraine War
+```{r}
+# Gulf War window
+gulf_train <- window(wti_ts, start = c(1986, 1), end = c(1990, 6))
+gulf_test  <- window(wti_ts, start = c(1990, 7), end = c(1991, 1))
+
+#log transform
+gulf_train_log <- log(gulf_train)
+gulf_test_log  <- log(gulf_test)
+
+#Gulf War baseline model
+fit_gulf_arima <- auto.arima(gulf_train_log)
+fit_gulf_ets   <- ets(gulf_train_log)
+fit_gulf_tbats <- tbats(gulf_train_log)
+
+#Forecast Gulf War based on baseline
+h_gulf <- length(gulf_test_log)
+
+fc_gulf_arima <- forecast(fit_gulf_arima, h = h_gulf)
+fc_gulf_ets   <- forecast(fit_gulf_ets, h = h_gulf)
+fc_gulf_tbats <- forecast(fit_gulf_tbats, h = h_gulf)
+
+# War shock effects
+shock_gulf_arima <- as.numeric(gulf_test_log - fc_gulf_arima$mean)
+shock_gulf_ets   <- as.numeric(gulf_test_log - fc_gulf_ets$mean)
+shock_gulf_tbats <- as.numeric(gulf_test_log - fc_gulf_tbats$mean)
+```
+
+# Ukraine War's effect forecast
+```{r}
+# Ukraine window（same length as Gulf War）
+ukr_train <- window(wti_ts, start = c(2018, 1), end = c(2022, 1))
+ukr_test  <- window(wti_ts, start = c(2022, 2), end = c(2022, 8))  # 7 months
+
+#log transform
+ukr_train_log <- log(ukr_train) 
+ukr_test_log  <- log(ukr_test)
+
+#Ukraine baseline models
+fit_ukr_arima <- auto.arima(ukr_train_log)
+fit_ukr_ets   <- ets(ukr_train_log)
+fit_ukr_tbats <- tbats(ukr_train_log)
+
+#Forecast 2022 war period baseline
+h_ukr <- length(ukr_test_log)
+
+fc_ukr_arima <- forecast(fit_ukr_arima, h = h_ukr)
+fc_ukr_ets   <- forecast(fit_ukr_ets, h = h_ukr)
+fc_ukr_tbats <- forecast(fit_ukr_tbats, h = h_ukr)
+
+```
+
+#ARIMA + War Shock
+```{r}
+pred_ukr_arima_war_log <- as.numeric(fc_ukr_arima$mean) + shock_gulf_arima
+pred_ukr_arima_war <- exp(pred_ukr_arima_war_log)
+```
+
+#ETS + War shock
+```{r}
+pred_ukr_ets_war_log <- as.numeric(fc_ukr_ets$mean) + shock_gulf_ets
+pred_ukr_ets_war <- exp(pred_ukr_ets_war_log)
+```
+
+#TBATS + War shock
+```{r}
+pred_ukr_tbats_war_log <- as.numeric(fc_ukr_tbats$mean) + shock_gulf_tbats
+pred_ukr_tbats_war <- exp(pred_ukr_tbats_war_log)
+```
+
+#Compare forecasting data and real data
+```{r}
+actual_ukr <- as.numeric(ukr_test)
+Arima_Scores<-accuracy(pred_ukr_arima_war, actual_ukr)
+ETS_Scores<-accuracy(pred_ukr_ets_war, actual_ukr)
+TBAT_Scores<-accuracy(pred_ukr_tbats_war, actual_ukr)
+
+scores_cbind <- as.data.frame(rbind(Arima_Scores, ETS_Scores, TBAT_Scores))
+row.names(scores_cbind) <-c("ARIMA","ETS","TBAT")
+print(scores_cbind)
+```
+> We found that ARIMA is the best model.
+
+#Use Ukraine War's shock to predict WTI price after 2026.4
+```{r}
+#Ukraine war shock 
+shock_ukr_arima <- as.numeric(ukr_test_log - fc_ukr_arima$mean)
+
+# check the shock values
+print(shock_ukr_arima)
+
+#Year 2026's WTI price
+wti_train_2026 <- window(wti_ts, start = c(2022, 9), end = c(2026, 3)) #Use data after the Ukraine War
+wti_train_2026_log <- log(wti_train_2026)
+
+fit_final_arima <- auto.arima(wti_train_2026_log)
+summary(fit_final_arima)
+
+#Forecast baseline WTI after April 2026 
+h_future <- length(shock_ukr_arima)
+
+fc_2026_arima <- forecast(fit_final_arima, h = h_future)
+
+# baseline forecast in log scale
+baseline_2026_log <- as.numeric(fc_2026_arima$mean)
+
+#Add 2022 Ukraine War shock trend to the 2026 baseline forecast
+pred_2026_war_log <- baseline_2026_log + shock_ukr_arima
+pred_2026_war <- exp(pred_2026_war_log)
+
+#output
+forecast_2026_results <- data.frame(
+  Time = time(fc_2026_arima$mean),
+  ARIMA_with_2022_WarShock = pred_2026_war
+)
+
+print(forecast_2026_results)
+```
+
+#Graph the forecast result
+```{r}
+# Filter observed data from 2021 to 2026.3
+wti_plot_actual <- window(wti_ts, start = c(2021, 1), end = c(2026, 3))
+
+
+#Turn forecast data into time series
+wti_forecast_ts <- ts(
+  pred_2026_war,
+  start = c(2026, 4),
+  frequency = 12
+)
+
+#Plot observed data
+plot(
+  wti_plot_actual,
+  xlim = c(2021, 2026 + 10/12),
+  ylim = range(c(wti_plot_actual, wti_forecast_ts)),
+  col = "black",
+  lwd = 2,
+  ylab = "WTI Price",
+  xlab = "Time",
+  main = "WTI Price (2021–2026) with Forecast"
+)
+
+  abline(v = 2026 + 3/12, col = "blue", lty = 3, lwd = 2) +
+  lines(
+  wti_forecast_ts,
+  col = "red",
+  lwd = 2,
+  lty = 2 
+)
+
+  legend(
+  "topleft",
+  legend = c("Actual WTI", "Forecast (ARIMA + War Shock)", "Forecast Start"),
+  col = c("black", "red", "blue"),
+  lty = c(1, 2, 3),
+  lwd = 2,
+  cex = 0.8
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
